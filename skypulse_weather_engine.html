@@ -1,0 +1,1482 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyPulse | Live Weather, ML Rain & Agricultural Intelligence</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        skyPulse: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                            950: '#082f49',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #030712;
+            color: #f3f4f6;
+            overflow-x: hidden;
+        }
+
+        /* Glassmorphism Styles */
+        .glass-card {
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+        }
+
+        .glass-card-sm {
+            background: rgba(30, 41, 59, 0.55);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-input {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(8px);
+        }
+        .glass-input:focus {
+            border-color: #38bdf8;
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+        }
+
+        /* 3D Map Perspective Container */
+        .map-3d-wrapper {
+            perspective: 1200px;
+            transition: all 0.5s ease-in-out;
+        }
+
+        .map-3d-inner {
+            transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+            transform-style: preserve-3d;
+        }
+
+        .map-3d-inner.tilted {
+            transform: rotateX(28deg) rotateZ(-2deg) scale(0.96);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8);
+        }
+
+        /* Background Canvas */
+        #waterCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.3);
+            border-radius: 999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(56, 189, 248, 0.6);
+        }
+
+        /* Pulsing Glow Effect */
+        .pulse-glow {
+            animation: pulseGlow 2.5s infinite ease-in-out;
+        }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 15px rgba(14, 165, 233, 0.3); }
+            50% { box-shadow: 0 0 30px rgba(14, 165, 233, 0.7); }
+        }
+
+        /* Weather Radar Heatmap Legend */
+        .scale-gradient {
+            background: linear-gradient(to right, #3b82f6, #06b6d4, #10b981, #eab308, #f97316, #ef4444, #a855f7);
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-100 relative selection:bg-sky-500 selection:text-white">
+
+    <!-- Background Canvas for Falling Rain Drops, Condensation & Ripples -->
+    <canvas id="waterCanvas"></canvas>
+
+    <!-- Main Content App Container -->
+    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+
+        <!-- HEADER / NAVIGATION -->
+        <header class="glass-card rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            <!-- Brand Logo -->
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/30 pulse-glow">
+                    <i class="fa-solid fa-droplet text-2xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-sky-400 via-blue-300 to-indigo-200 bg-clip-text text-transparent">
+                            SkyPulse
+                        </h1>
+                        <span class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                            LIVE v3.5
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400 font-medium">Precision Rain Physics & Agricultural Weather Engine</p>
+                </div>
+            </div>
+
+            <!-- Global Search & Geolocation -->
+            <div class="relative w-full md:w-96">
+                <div class="relative">
+                    <input type="text" id="searchInput" placeholder="Search city (e.g., Patna, London, Tokyo, Mumbai)..." 
+                           class="w-full glass-input rounded-2xl pl-11 pr-24 py-3 text-sm text-white placeholder-slate-400 focus:outline-none transition-all">
+                    <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-slate-400"></i>
+                    
+                    <button id="geoBtn" title="Use current GPS location"
+                            class="absolute right-2 top-2 px-3 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/40 text-sky-300 text-xs font-semibold transition-all flex items-center gap-1.5 border border-sky-500/30">
+                        <i class="fa-solid fa-location-crosshairs text-xs"></i>
+                        <span>GPS</span>
+                    </button>
+                </div>
+                <!-- Search Suggestions Dropdown -->
+                <div id="searchDropdown" class="hidden absolute top-full left-0 right-0 mt-2 glass-card rounded-2xl border border-slate-700/60 overflow-hidden z-50 max-h-60 overflow-y-auto">
+                </div>
+            </div>
+
+            <!-- Quick Settings Bar (Audio Rain Synth, Temperature Units, Glass Droplet Wipe) -->
+            <div class="flex items-center gap-3 self-end md:self-auto">
+                <!-- Audio Ambient Rain Synthesizer -->
+                <button id="audioToggleBtn" class="glass-card-sm px-3.5 py-2.5 rounded-2xl text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all text-xs font-medium flex items-center gap-2 border border-slate-700/50" title="Toggle Synthesized Rain Sound">
+                    <i class="fa-solid fa-volume-xmark text-sky-400 text-sm" id="audioIcon"></i>
+                    <span class="hidden sm:inline">Rain Sound</span>
+                </button>
+
+                <!-- Temperature Unit Switcher -->
+                <div class="glass-card-sm p-1 rounded-2xl flex border border-slate-700/50 text-xs font-semibold">
+                    <button id="unitCel" class="px-3 py-1.5 rounded-xl bg-sky-500 text-white transition-all shadow-md">°C</button>
+                    <button id="unitFar" class="px-3 py-1.5 rounded-xl text-slate-400 hover:text-white transition-all">°F</button>
+                </div>
+
+                <!-- Rain Physics Controls Modal Trigger -->
+                <button id="rainSettingsBtn" class="glass-card-sm p-2.5 rounded-2xl text-slate-300 hover:text-white hover:bg-slate-800/80 transition-all border border-slate-700/50" title="Rain Physics Settings">
+                    <i class="fa-solid fa-sliders text-sky-400"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- MAIN CURRENT WEATHER HERO PANEL -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Left Hero Main Card (8 cols) -->
+            <div class="lg:col-span-8 glass-card rounded-3xl p-6 sm:p-8 relative overflow-hidden flex flex-col justify-between min-h-[340px]">
+                <!-- Subtle Background Decorative Glow -->
+                <div class="absolute -top-24 -right-24 w-72 h-72 bg-sky-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div>
+                    <!-- Location & Time -->
+                    <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h2 id="cityName" class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">Loading Location...</h2>
+                                <span id="countryCode" class="text-sm font-semibold text-sky-400 bg-sky-950/80 px-2.5 py-1 rounded-lg border border-sky-800/50">--</span>
+                            </div>
+                            <p id="localTime" class="text-xs sm:text-sm text-slate-400 mt-1">
+                                <i class="fa-regular fa-clock mr-1"></i> Synchronizing local time...
+                            </p>
+                        </div>
+                        <div id="weatherBadge" class="px-4 py-2 rounded-2xl bg-sky-500/10 border border-sky-500/30 text-sky-300 font-bold text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-spinner animate-spin" id="heroIcon"></i>
+                            <span id="weatherCondition">Updating...</span>
+                        </div>
+                    </div>
+
+                    <!-- Main Temperature & Key Highlight -->
+                    <div class="flex flex-wrap items-baseline gap-6 my-4">
+                        <div class="flex items-start">
+                            <span id="currentTemp" class="text-6xl sm:text-7xl font-black tracking-tight text-white">--</span>
+                            <span class="text-2xl sm:text-3xl font-light text-sky-400 ml-1" id="tempUnitDisplay">°C</span>
+                        </div>
+                        <div class="space-y-1">
+                            <p class="text-sm text-slate-300 font-medium">
+                                Feels like <span id="feelsLikeTemp" class="font-bold text-white">--</span>
+                            </p>
+                            <p class="text-xs text-slate-400">
+                                Day High: <span id="todayHigh" class="text-amber-400 font-semibold">--</span> • 
+                                Night Low: <span id="todayLow" class="text-blue-400 font-semibold">--</span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Secondary Quick Metrics Grid -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-slate-700/50">
+                    <div class="glass-card-sm p-3 rounded-2xl">
+                        <span class="text-xs text-slate-400 block mb-1"><i class="fa-solid fa-wind text-sky-400 mr-1.5"></i>Wind Speed</span>
+                        <span id="windSpeed" class="text-lg font-bold text-white">-- km/h</span>
+                        <span id="windDir" class="text-xs text-slate-400 block mt-0.5">Dir: --</span>
+                    </div>
+
+                    <div class="glass-card-sm p-3 rounded-2xl">
+                        <span class="text-xs text-slate-400 block mb-1"><i class="fa-solid fa-droplet text-blue-400 mr-1.5"></i>Humidity</span>
+                        <span id="humidityVal" class="text-lg font-bold text-white">--%</span>
+                        <span id="dewPointVal" class="text-xs text-slate-400 block mt-0.5">Dew Pt: --°C</span>
+                    </div>
+
+                    <div class="glass-card-sm p-3 rounded-2xl">
+                        <span class="text-xs text-slate-400 block mb-1"><i class="fa-solid fa-gauge-high text-emerald-400 mr-1.5"></i>Pressure</span>
+                        <span id="pressureVal" class="text-lg font-bold text-white">-- hPa</span>
+                        <span id="pressureTrend" class="text-xs text-emerald-400 block mt-0.5">Steady</span>
+                    </div>
+
+                    <div class="glass-card-sm p-3 rounded-2xl">
+                        <span class="text-xs text-slate-400 block mb-1"><i class="fa-solid fa-cloud-showers-heavy text-indigo-400 mr-1.5"></i>Rain Rate</span>
+                        <span id="precipRate" class="text-lg font-bold text-white">0.0 mm</span>
+                        <span id="cloudCoverVal" class="text-xs text-slate-400 block mt-0.5">Cloud: --%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Hero Card: Real-time Weather Warning & Solar/Atmospheric soundings (4 cols) -->
+            <div class="lg:col-span-4 glass-card rounded-3xl p-6 flex flex-col justify-between">
+                <div>
+                    <h3 class="text-base font-bold text-white mb-4 flex items-center justify-between">
+                        <span><i class="fa-solid fa-triangle-exclamation text-amber-400 mr-2"></i>Atmospheric Status</span>
+                        <span id="alertLevelBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold">NORMAL</span>
+                    </h3>
+
+                    <!-- Dynamic Alert Message -->
+                    <div id="alertBox" class="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 mb-4 text-xs text-slate-300 leading-relaxed">
+                        Scanning real-time meteorological vectors...
+                    </div>
+
+                    <!-- Solar & Celestial Cycles -->
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 text-xs">
+                            <span class="text-slate-400 flex items-center gap-2"><i class="fa-solid fa-sun text-amber-400"></i> Sunrise</span>
+                            <span id="sunriseTime" class="font-bold text-slate-200">--:-- AM</span>
+                        </div>
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 text-xs">
+                            <span class="text-slate-400 flex items-center gap-2"><i class="fa-solid fa-moon text-indigo-400"></i> Sunset</span>
+                            <span id="sunsetTime" class="font-bold text-slate-200">--:-- PM</span>
+                        </div>
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 text-xs">
+                            <span class="text-slate-400 flex items-center gap-2"><i class="fa-solid fa-stopwatch text-sky-400"></i> Daylight Hours</span>
+                            <span id="daylightDuration" class="font-bold text-slate-200">-- hrs</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Pulse Water Meter -->
+                <div class="mt-4 pt-4 border-t border-slate-700/50 flex items-center justify-between text-xs">
+                    <span class="text-slate-400">Condensation Index</span>
+                    <div class="w-32 bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div id="condensationBar" class="bg-gradient-to-r from-sky-500 to-blue-400 h-full w-1/2 transition-all duration-1000"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- DAY vs NIGHT TEMPERATURE ENGINE -->
+        <section class="glass-card rounded-3xl p-6 sm:p-8 space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700/50 pb-4">
+                <div>
+                    <h3 class="text-xl font-extrabold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-cloud-sun text-amber-400"></i>
+                        Day vs Night Temperature Engine
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">Detailed diurnal thermal breakdown and 7-day fluctuation amplitude</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold text-slate-400">Diurnal Delta ($\Delta T$):</span>
+                    <span id="diurnalDeltaTag" class="px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 font-bold text-sm border border-amber-500/30">
+                        -- °C
+                    </span>
+                </div>
+            </div>
+
+            <!-- Diurnal Cards Grid -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div class="glass-card-sm p-4 rounded-2xl border-l-4 border-amber-400">
+                    <span class="text-xs font-semibold text-slate-400 block mb-1">Daytime Peak Max</span>
+                    <span id="dayMaxTemp" class="text-2xl font-black text-amber-400">--</span>
+                    <span class="text-[11px] text-slate-500 block mt-1">Peak solar heating</span>
+                </div>
+
+                <div class="glass-card-sm p-4 rounded-2xl border-l-4 border-amber-200">
+                    <span class="text-xs font-semibold text-slate-400 block mb-1">Daytime Floor Min</span>
+                    <span id="dayMinTemp" class="text-2xl font-black text-amber-200">--</span>
+                    <span class="text-[11px] text-slate-500 block mt-1">Morning baseline</span>
+                </div>
+
+                <div class="glass-card-sm p-4 rounded-2xl border-l-4 border-indigo-400">
+                    <span class="text-xs font-semibold text-slate-400 block mb-1">Nighttime Floor Min</span>
+                    <span id="nightMinTemp" class="text-2xl font-black text-indigo-400">--</span>
+                    <span class="text-[11px] text-slate-500 block mt-1">Maximum radiational cooling</span>
+                </div>
+
+                <div class="glass-card-sm p-4 rounded-2xl border-l-4 border-sky-400">
+                    <span class="text-xs font-semibold text-slate-400 block mb-1">Night Avg Temperature</span>
+                    <span id="nightAvgTemp" class="text-2xl font-black text-sky-400">--</span>
+                    <span class="text-[11px] text-slate-500 block mt-1">Late evening average</span>
+                </div>
+
+                <div class="glass-card-sm p-4 rounded-2xl border-l-4 border-emerald-400 col-span-2 sm:col-span-1">
+                    <span class="text-xs font-semibold text-slate-400 block mb-1">Thermal Amplitude</span>
+                    <span id="thermalRating" class="text-lg font-extrabold text-emerald-400">Moderate</span>
+                    <span class="text-[11px] text-slate-500 block mt-1">Crop thermal stress index</span>
+                </div>
+            </div>
+
+            <!-- 7-Day Day vs Night Comparison Visualizer Chart -->
+            <div class="pt-2">
+                <div class="h-64 sm:h-72 w-full relative">
+                    <canvas id="dayNightChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- INTERACTIVE 3D SCALE MAP & WEATHER RADAR -->
+        <section class="glass-card rounded-3xl p-6 sm:p-8 space-y-4">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h3 class="text-xl font-extrabold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-layer-group text-sky-400"></i>
+                        Interactive 3D Scale Weather Radar
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">Real-time precipitation radar, cloud satellite layer, and thermal elevation scale</p>
+                </div>
+
+                <!-- Layer Toggles & 3D Tilt Control -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <button id="tiltMapBtn" class="px-3 py-1.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-all flex items-center gap-1.5">
+                        <i class="fa-solid fa-cube"></i>
+                        <span>Toggle 3D Perspective</span>
+                    </button>
+
+                    <div class="flex items-center bg-slate-900/60 p-1 rounded-xl border border-slate-700/60 text-xs">
+                        <button id="layerRadar" class="px-2.5 py-1 rounded-lg bg-sky-500 text-white font-semibold">Radar</button>
+                        <button id="layerClouds" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white">Clouds</button>
+                        <button id="layerTemp" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white">Thermal</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3D Perspective Wrapper -->
+            <div class="map-3d-wrapper overflow-hidden rounded-2xl border border-slate-700/60">
+                <div id="mapInner" class="map-3d-inner h-[420px] w-full relative">
+                    <div id="weatherMap" class="h-full w-full bg-slate-950"></div>
+                </div>
+            </div>
+
+            <!-- Elevation Scale Legend Bar -->
+            <div class="glass-card-sm p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-3 w-full sm:w-auto">
+                    <span class="text-xs font-bold text-slate-300 whitespace-nowrap">Precipitation Scale:</span>
+                    <div class="flex-1 sm:w-64 h-3 rounded-full scale-gradient relative"></div>
+                </div>
+                <div class="flex items-center justify-between w-full sm:w-auto gap-4 text-[11px] text-slate-400 font-mono">
+                    <span>Light (0.1 mm/h)</span>
+                    <span>Moderate (2.5 mm/h)</span>
+                    <span>Heavy (10+ mm/h)</span>
+                    <span class="text-purple-400 font-bold">Torrential</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ML RAIN PREDICTION ENGINE & 24-HOUR FORECAST -->
+        <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Left: Dynamic ML Calculation Dial Card (4 cols) -->
+            <div class="lg:col-span-4 glass-card rounded-3xl p-6 flex flex-col justify-between">
+                <div>
+                    <h3 class="text-lg font-extrabold text-white mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-brain text-purple-400"></i>
+                        ML Rain Engine
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-6">Real-time dynamic rain probability estimator based on dew point spread & pressure delta</p>
+
+                    <!-- Probability Score Dial -->
+                    <div class="flex flex-col items-center justify-center my-4">
+                        <div class="relative w-40 h-40 flex items-center justify-center">
+                            <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                                <path class="text-slate-800" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                <path id="probCircle" class="text-sky-400 transition-all duration-1000 ease-out" stroke-dasharray="0, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            </svg>
+                            <div class="absolute flex flex-col items-center">
+                                <span id="mlRainProbText" class="text-3xl font-black text-white">0%</span>
+                                <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Rain Probability</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dew Point Spread Breakdown -->
+                    <div class="space-y-2 mt-4 text-xs">
+                        <div class="flex justify-between p-2 rounded-xl bg-slate-900/50">
+                            <span class="text-slate-400">Dew Point Spread ($T - T_d$)</span>
+                            <span id="dewSpreadVal" class="font-mono font-bold text-sky-300">-- °C</span>
+                        </div>
+                        <div class="flex justify-between p-2 rounded-xl bg-slate-900/50">
+                            <span class="text-slate-400">Convective Instability Score</span>
+                            <span id="instabilityScore" class="font-mono font-bold text-amber-300">Moderate</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="mlDownpourStatus" class="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/30 text-xs text-sky-200 text-center font-semibold mt-4">
+                    Calculating cloud saturation...
+                </div>
+            </div>
+
+            <!-- Right: 24-Hour Rainfall Prediction Chart (8 cols) -->
+            <div class="lg:col-span-8 glass-card rounded-3xl p-6 space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-700/50 pb-3">
+                    <h3 class="text-lg font-extrabold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line text-sky-400"></i>
+                        24-Hour Hourly Rainfall & Probability Curve
+                    </h3>
+                    <span class="text-xs text-slate-400">Updated hourly</span>
+                </div>
+
+                <div class="h-64 sm:h-72 w-full">
+                    <canvas id="rainHourlyChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- FLOOD DANGER & RIVER LEVEL TRACKER -->
+        <section class="glass-card rounded-3xl p-6 sm:p-8 space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700/50 pb-4">
+                <div>
+                    <h3 class="text-xl font-extrabold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-water text-blue-400"></i>
+                        Flood Danger & River Level Tracker
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">Water basin accumulation, river gauge status, and drainage saturation danger indices</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-slate-400">Active Flood Risk Index:</span>
+                    <span id="floodRiskIndexBadge" class="px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 font-bold text-xs border border-emerald-500/30">
+                        LOW RISK
+                    </span>
+                </div>
+            </div>
+
+            <!-- River Risk Monitoring Table / Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4" id="riverCardsContainer">
+                <!-- Preset Vulnerable River Cities Cards will be rendered here dynamically -->
+            </div>
+
+            <!-- River Drainage Soundings -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div class="glass-card-sm p-4 rounded-2xl flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-cloud-rain"></i>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 block">48h Accumulation</span>
+                        <span id="accRain48" class="text-lg font-bold text-white">-- mm</span>
+                    </div>
+                </div>
+
+                <div class="glass-card-sm p-4 rounded-2xl flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-layer-group"></i>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 block">Soil Moisture Saturation</span>
+                        <span id="soilSatVal" class="text-lg font-bold text-white">-- %</span>
+                    </div>
+                </div>
+
+                <div class="glass-card-sm p-4 rounded-2xl flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center text-lg">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-400 block">Drainage Overflow Risk</span>
+                        <span id="drainageRiskVal" class="text-lg font-bold text-white">Low</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- AGRICULTURAL ADVISORY FOR FARMERS -->
+        <section class="glass-card rounded-3xl p-6 sm:p-8 space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700/50 pb-4">
+                <div>
+                    <h3 class="text-xl font-extrabold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-wheat-awn text-emerald-400"></i>
+                        Agricultural Weather Advisory for Farmers
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">Sowing windows, chemical spray safety, frost/heat stress & irrigation ($ET_0$) management</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
+                        <i class="fa-solid fa-seedling mr-1"></i> Farm Operational Insights
+                    </span>
+                </div>
+            </div>
+
+            <!-- Agricultural Metrics 4-Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Sowing & Planting Suitability -->
+                <div class="glass-card-sm p-5 rounded-2xl space-y-2 border-t-2 border-emerald-400">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-300">Sowing Suitability</span>
+                        <i class="fa-solid fa-plant-wilt text-emerald-400"></i>
+                    </div>
+                    <div class="text-2xl font-black text-white" id="sowingScore">-- %</div>
+                    <p class="text-[11px] text-slate-400 leading-tight" id="sowingAdvice">Calculating optimal moisture window...</p>
+                </div>
+
+                <!-- Pesticide & Spray Window -->
+                <div class="glass-card-sm p-5 rounded-2xl space-y-2 border-t-2 border-sky-400">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-300">Spray Window</span>
+                        <i class="fa-solid fa-spray-can text-sky-400"></i>
+                    </div>
+                    <div class="text-xl font-black text-sky-300" id="sprayStatus">Checking...</div>
+                    <p class="text-[11px] text-slate-400 leading-tight" id="sprayAdvice">Wind & precipitation window validation...</p>
+                </div>
+
+                <!-- Crop Frost / Heat Stress Rating -->
+                <div class="glass-card-sm p-5 rounded-2xl space-y-2 border-t-2 border-amber-400">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-300">Crop Stress Risk</span>
+                        <i class="fa-solid fa-temperature-arrow-up text-amber-400"></i>
+                    </div>
+                    <div class="text-xl font-black text-amber-300" id="cropStressStatus">Minimal</div>
+                    <p class="text-[11px] text-slate-400 leading-tight" id="cropStressAdvice">Evaluating daytime thermal maximums...</p>
+                </div>
+
+                <!-- Evapotranspiration & Irrigation Demand -->
+                <div class="glass-card-sm p-5 rounded-2xl space-y-2 border-t-2 border-indigo-400">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-300">Irrigation Demand ($ET_0$)</span>
+                        <i class="fa-solid fa-faucet-drip text-indigo-400"></i>
+                    </div>
+                    <div class="text-2xl font-black text-indigo-300" id="et0Val">-- mm/day</div>
+                    <p class="text-[11px] text-slate-400 leading-tight" id="et0Advice">Reference evapotranspiration calculated.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- FOOTER -->
+        <footer class="glass-card rounded-3xl p-6 text-center text-xs text-slate-400 space-y-2">
+            <p>© 2026 <span class="font-bold text-sky-400">SkyPulse Weather Engine</span>. Real-time meteorological intelligence powered by Open-Meteo API.</p>
+            <p class="text-[11px] text-slate-500">Continuous HTML5 Canvas Water Physics • 3D Tactical Scale Radar • Agricultural & Flood Risk Forecasting</p>
+        </footer>
+
+    </div>
+
+    <!-- RAIN PHYSICS SETTINGS MODAL -->
+    <div id="rainModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+        <div class="glass-card rounded-3xl max-w-md w-full p-6 space-y-6 border border-slate-700">
+            <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-sky-400"></i> Canvas Water Droplet Settings
+                </h3>
+                <button id="closeRainModal" class="text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <div class="flex justify-between text-xs text-slate-300 mb-1">
+                        <span>Rain Density / Drop Count</span>
+                        <span id="countValText" class="font-bold">400</span>
+                    </div>
+                    <input type="range" id="rainCountSlider" min="50" max="1000" value="400" class="w-full accent-sky-400">
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs text-slate-300 mb-1">
+                        <span>Falling Speed</span>
+                        <span id="speedValText" class="font-bold">1.0x</span>
+                    </div>
+                    <input type="range" id="rainSpeedSlider" min="0.2" max="3.0" step="0.1" value="1.0" class="w-full accent-sky-400">
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs text-slate-300 mb-1">
+                        <span>Glass Droplet Condensation Rate</span>
+                        <span id="condValText" class="font-bold">Medium</span>
+                    </div>
+                    <input type="range" id="condSlider" min="0" max="2" step="1" value="1" class="w-full accent-sky-400">
+                </div>
+            </div>
+
+            <button id="wipeGlassBtn" class="w-full py-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-bold transition-all shadow-lg shadow-sky-500/25">
+                <i class="fa-solid fa-hand-sparkles mr-2"></i> Wipe Screen Droplets
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const state = {
+            lat: 28.6139,
+            lng: 77.2090,
+            cityName: "New Delhi",
+            country: "IN",
+            unit: 'C', // 'C' or 'F'
+            weatherData: null,
+            map: null,
+            marker: null,
+            radarLayer: null,
+            dayNightChart: null,
+            rainChart: null,
+            audioCtx: null,
+            rainGain: null,
+            isAudioPlaying: false
+        };
+
+        const canvas = document.getElementById('waterCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let drops = [];
+        let glassDroplets = [];
+        let ripples = [];
+        let rainConfig = {
+            count: 400,
+            speedMultiplier: 1.0,
+            condensationLevel: 1
+        };
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            initRain();
+        }
+
+        class Drop {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * -canvas.height;
+                this.length = Math.random() * 20 + 10;
+                this.speed = (Math.random() * 12 + 10) * rainConfig.speedMultiplier;
+                this.opacity = Math.random() * 0.4 + 0.1;
+                this.width = Math.random() * 1.5 + 0.5;
+            }
+            update() {
+                this.y += this.speed;
+                if (this.y > canvas.height) {
+                    if (Math.random() < 0.2) {
+                        ripples.push(new Ripple(this.x, canvas.height - Math.random() * 10));
+                    }
+                    this.reset();
+                }
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x, this.y + this.length);
+                ctx.strokeStyle = `rgba(186, 230, 253, ${this.opacity})`;
+                ctx.lineWidth = this.width;
+                ctx.stroke();
+            }
+        }
+
+        class GlassDroplet {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.radius = Math.random() * 3 + 1.5;
+                this.vy = Math.random() * 0.3;
+                this.alpha = Math.random() * 0.6 + 0.2;
+            }
+            update() {
+                if (this.radius > 2.5 && Math.random() < 0.05) {
+                    this.y += this.vy + (this.radius * 0.15);
+                }
+                if (this.y > canvas.height + 10) {
+                    this.y = -10;
+                    this.x = Math.random() * canvas.width;
+                }
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha * 0.5})`;
+                ctx.fill();
+                // Specular highlight on liquid droplet
+                ctx.beginPath();
+                ctx.arc(this.x - this.radius * 0.3, this.y - this.radius * 0.3, this.radius * 0.3, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha * 0.9})`;
+                ctx.fill();
+            }
+        }
+
+        class Ripple {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 1;
+                this.maxRadius = Math.random() * 15 + 10;
+                this.opacity = 0.6;
+            }
+            update() {
+                this.radius += 0.8;
+                this.opacity -= 0.02;
+            }
+            draw() {
+                if (this.opacity <= 0) return;
+                ctx.beginPath();
+                ctx.ellipse(this.x, this.y, this.radius, this.radius * 0.4, 0, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(186, 230, 253, ${this.opacity})`;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        }
+
+        function initRain() {
+            drops = [];
+            for (let i = 0; i < rainConfig.count; i++) {
+                drops.push(new Drop());
+            }
+
+            glassDroplets = [];
+            const glassCount = rainConfig.condensationLevel === 0 ? 30 : (rainConfig.condensationLevel === 1 ? 120 : 250);
+            for (let i = 0; i < glassCount; i++) {
+                glassDroplets.push(new GlassDroplet());
+            }
+        }
+
+        function animateWater() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Update & Draw falling rain
+            drops.forEach(d => {
+                d.update();
+                d.draw();
+            });
+
+            // Update & Draw glass droplets
+            glassDroplets.forEach(g => {
+                g.update();
+                g.draw();
+            });
+
+            // Update & Draw ripples
+            for (let i = ripples.length - 1; i >= 0; i--) {
+                ripples[i].update();
+                ripples[i].draw();
+                if (ripples[i].opacity <= 0) {
+                    ripples.splice(i, 1);
+                }
+            }
+
+            requestAnimationFrame(animateWater);
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        animateWater();
+
+        window.addEventListener('click', (e) => {
+            for (let i = 0; i < 3; i++) {
+                ripples.push(new Ripple(e.clientX + (Math.random() * 20 - 10), e.clientY + (Math.random() * 20 - 10)));
+            }
+        });
+
+        function initAudioSynthesizer() {
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                state.audioCtx = new AudioCtx();
+
+                const bufferSize = state.audioCtx.sampleRate * 2;
+                const noiseBuffer = state.audioCtx.createBuffer(1, bufferSize, state.audioCtx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = Math.random() * 2 - 1;
+                }
+
+                const whiteNoise = state.audioCtx.createBufferSource();
+                whiteNoise.buffer = noiseBuffer;
+                whiteNoise.loop = true;
+
+                const filter = state.audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 800;
+
+                state.rainGain = state.audioCtx.createGain();
+                state.rainGain.gain.value = 0.05;
+
+                whiteNoise.connect(filter);
+                filter.connect(state.rainGain);
+                state.rainGain.connect(state.audioCtx.destination);
+
+                whiteNoise.start();
+            } catch (e) {
+                console.warn('Web Audio API not supported', e);
+            }
+        }
+
+        document.getElementById('audioToggleBtn').addEventListener('click', () => {
+            if (!state.audioCtx) {
+                initAudioSynthesizer();
+                state.isAudioPlaying = true;
+                document.getElementById('audioIcon').className = 'fa-solid fa-volume-high text-sky-400 text-sm';
+                return;
+            }
+
+            if (state.audioCtx.state === 'suspended') {
+                state.audioCtx.resume();
+                state.isAudioPlaying = true;
+                document.getElementById('audioIcon').className = 'fa-solid fa-volume-high text-sky-400 text-sm';
+            } else if (state.audioCtx.state === 'running') {
+                state.audioCtx.suspend();
+                state.isAudioPlaying = false;
+                document.getElementById('audioIcon').className = 'fa-solid fa-volume-xmark text-sky-400 text-sm';
+            }
+        });
+
+        const searchInput = document.getElementById('searchInput');
+        const searchDropdown = document.getElementById('searchDropdown');
+
+        let debounceTimer;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            const query = e.target.value.trim();
+            if (query.length < 2) {
+                searchDropdown.classList.add('hidden');
+                return;
+            }
+
+            debounceTimer = setTimeout(() => {
+                fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=en&format=json`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.results && data.results.length > 0) {
+                            searchDropdown.innerHTML = '';
+                            data.results.forEach(loc => {
+                                const item = document.createElement('div');
+                                item.className = 'p-3 hover:bg-sky-500/20 cursor-pointer text-xs border-b border-slate-700/40 last:border-0 flex justify-between items-center';
+                                item.innerHTML = `
+                                    <div>
+                                        <span class="font-bold text-white">${loc.name}</span>
+                                        <span class="text-slate-400 ml-1">${loc.admin1 || ''}, ${loc.country || ''}</span>
+                                    </div>
+                                    <span class="font-mono text-[10px] text-sky-400">${loc.latitude.toFixed(2)}°, ${loc.longitude.toFixed(2)}°</span>
+                                `;
+                                item.addEventListener('click', () => {
+                                    state.lat = loc.latitude;
+                                    state.lng = loc.longitude;
+                                    state.cityName = loc.name;
+                                    state.country = loc.country_code || loc.country || '';
+                                    searchDropdown.classList.add('hidden');
+                                    searchInput.value = loc.name;
+                                    fetchWeatherData();
+                                });
+                                searchDropdown.appendChild(item);
+                            });
+                            searchDropdown.classList.remove('hidden');
+                        } else {
+                            searchDropdown.classList.add('hidden');
+                        }
+                    }).catch(err => console.error(err));
+            }, 300);
+        });
+
+        // GPS Geolocation Handler
+        document.getElementById('geoBtn').addEventListener('click', () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        state.lat = pos.coords.latitude;
+                        state.lng = pos.coords.longitude;
+                        state.cityName = "Your GPS Location";
+                        state.country = "LOCAL";
+                        fetchWeatherData();
+                    },
+                    (err) => {
+                        alert("Geolocation permission denied or unavailable. Defaulting to location.");
+                    }
+                );
+            }
+        });
+
+        async function fetchWeatherData() {
+            try {
+                document.getElementById('cityName').textContent = state.cityName;
+                document.getElementById('countryCode').textContent = state.country;
+
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${state.lat}&longitude=${state.lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,dew_point_2m&hourly=temperature_2m,relative_humidity_2m,dew_point_2m,precipitation_probability,precipitation,cloud_cover,pressure_msl,et0_fao_evapotranspiration&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,daylight_duration,precipitation_sum,precipitation_probability_max&timezone=auto`;
+
+                const response = await fetch(url);
+                const data = await response.json();
+                state.weatherData = data;
+
+                renderAllDashboardComponents(data);
+            } catch (error) {
+                console.error("Error fetching weather data:", error);
+            }
+        }
+
+        function renderAllDashboardComponents(data) {
+            const current = data.current;
+            const daily = data.daily;
+            const hourly = data.hourly;
+
+            // Unit Helper Function
+            const convertTemp = (celsius) => {
+                if (state.unit === 'F') return Math.round((celsius * 9/5) + 32);
+                return Math.round(celsius);
+            };
+
+            const tempUnitSymbol = state.unit === 'F' ? '°F' : '°C';
+            document.getElementById('tempUnitDisplay').textContent = tempUnitSymbol;
+
+            // 1. Hero Card Updates
+            document.getElementById('currentTemp').textContent = convertTemp(current.temperature_2m);
+            document.getElementById('feelsLikeTemp').textContent = `${convertTemp(current.apparent_temperature)} ${tempUnitSymbol}`;
+            document.getElementById('todayHigh').textContent = `${convertTemp(daily.temperature_2m_max[0])} ${tempUnitSymbol}`;
+            document.getElementById('todayLow').textContent = `${convertTemp(daily.temperature_2m_min[0])} ${tempUnitSymbol}`;
+
+            document.getElementById('windSpeed').textContent = `${current.wind_speed_10m} km/h`;
+            document.getElementById('windDir').textContent = `Dir: ${current.wind_direction_10m}°`;
+            document.getElementById('humidityVal').textContent = `${current.relative_humidity_2m}%`;
+            document.getElementById('dewPointVal').textContent = `Dew Pt: ${convertTemp(current.dew_point_2m)} ${tempUnitSymbol}`;
+            document.getElementById('pressureVal').textContent = `${Math.round(current.pressure_msl)} hPa`;
+            document.getElementById('precipRate').textContent = `${current.precipitation} mm`;
+            document.getElementById('cloudCoverVal').textContent = `Cloud: ${current.cloud_cover}%`;
+
+            // Weather Code Interpretation
+            const weatherDesc = getWeatherDescription(current.weather_code);
+            document.getElementById('weatherCondition').textContent = weatherDesc.text;
+            document.getElementById('heroIcon').className = `fa-solid ${weatherDesc.icon} mr-1`;
+
+            // Adjust rain canvas intensity based on current rain level
+            if (current.precipitation > 0) {
+                rainConfig.count = Math.min(1000, 300 + Math.round(current.precipitation * 100));
+                rainConfig.speedMultiplier = 1.3;
+                initRain();
+            }
+
+            // Local Time & Sunrise/Sunset
+            const localDateStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            document.getElementById('localTime').innerHTML = `<i class="fa-regular fa-clock mr-1"></i> Local time: ${localDateStr}`;
+
+            document.getElementById('sunriseTime').textContent = daily.sunrise[0].split('T')[1];
+            document.getElementById('sunsetTime').textContent = daily.sunset[0].split('T')[1];
+            document.getElementById('daylightDuration').textContent = `${(daily.daylight_duration[0] / 3600).toFixed(1)} hrs`;
+
+            // Condensation Index Bar
+            const condScore = Math.min(100, Math.max(10, current.relative_humidity_2m - (current.temperature_2m - current.dew_point_2m) * 3));
+            document.getElementById('condensationBar').style.width = `${condScore}%`;
+
+            // Alert Box status
+            const alertBox = document.getElementById('alertBox');
+            const alertBadge = document.getElementById('alertLevelBadge');
+            if (current.precipitation > 5 || daily.precipitation_sum[0] > 20) {
+                alertBadge.textContent = "HEAVY RAIN WARNING";
+                alertBadge.className = "text-xs px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 font-bold border border-red-500/40";
+                alertBox.innerHTML = `<span class="text-red-400 font-bold">Alert:</span> High precipitation rate detected (${current.precipitation} mm/h). Risk of local waterlogging. Drive with caution.`;
+            } else if (current.temperature_2m > 38) {
+                alertBadge.textContent = "HEATWAVE ALERT";
+                alertBadge.className = "text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40";
+                alertBox.innerHTML = `<span class="text-amber-400 font-bold">Caution:</span> High thermal index detected (${convertTemp(current.temperature_2m)} ${tempUnitSymbol}). Stay hydrated.`;
+            } else {
+                alertBadge.textContent = "NORMAL STATUS";
+                alertBadge.className = "text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40";
+                alertBox.innerHTML = `Atmospheric conditions are clear to moderate. Dew point spread is ${ (current.temperature_2m - current.dew_point_2m).toFixed(1) } °C.`;
+            }
+
+            // 2. Day vs Night Temperature Engine
+            const dayMax = daily.temperature_2m_max[0];
+            const nightMin = daily.temperature_2m_min[0];
+            const diurnalDelta = (dayMax - nightMin).toFixed(1);
+
+            document.getElementById('diurnalDeltaTag').textContent = `${diurnalDelta} °C`;
+            document.getElementById('dayMaxTemp').textContent = `${convertTemp(dayMax)} ${tempUnitSymbol}`;
+            document.getElementById('dayMinTemp').textContent = `${convertTemp(dayMax - 4)} ${tempUnitSymbol}`;
+            document.getElementById('nightMinTemp').textContent = `${convertTemp(nightMin)} ${tempUnitSymbol}`;
+            document.getElementById('nightAvgTemp').textContent = `${convertTemp(nightMin + 2.5)} ${tempUnitSymbol}`;
+
+            const thermalRating = document.getElementById('thermalRating');
+            if (diurnalDelta > 15) {
+                thermalRating.textContent = "High Fluctuation";
+                thermalRating.className = "text-lg font-extrabold text-amber-400";
+            } else if (diurnalDelta < 6) {
+                thermalRating.textContent = "Low Fluctuation";
+                thermalRating.className = "text-lg font-extrabold text-blue-400";
+            } else {
+                thermalRating.textContent = "Moderate";
+                thermalRating.className = "text-lg font-extrabold text-emerald-400";
+            }
+
+            renderDayNightChart(daily);
+
+            // 3. Leaflet 3D Map Marker Update
+            updateLeafletMap(state.lat, state.lng, state.cityName);
+
+            // 4. ML Rain Engine Calculations
+            const dewSpread = current.temperature_2m - current.dew_point_2m;
+            document.getElementById('dewSpreadVal').textContent = `${dewSpread.toFixed(1)} °C`;
+
+            // ML Rain Formula Simulation based on physics parameters
+            let mlProb = Math.min(100, Math.max(0, 
+                (current.cloud_cover * 0.35) + 
+                (current.relative_humidity_2m * 0.35) + 
+                (Math.max(0, 15 - dewSpread) * 2.5)
+            ));
+            if (hourly.precipitation_probability && hourly.precipitation_probability[0] !== undefined) {
+                mlProb = Math.round((mlProb + hourly.precipitation_probability[0]) / 2);
+            } else {
+                mlProb = Math.round(mlProb);
+            }
+
+            document.getElementById('mlRainProbText').textContent = `${mlProb}%`;
+            document.getElementById('probCircle').setAttribute('stroke-dasharray', `${mlProb}, 100`);
+
+            const instabilityScore = document.getElementById('instabilityScore');
+            const mlDownpourStatus = document.getElementById('mlDownpourStatus');
+
+            if (mlProb > 75) {
+                instabilityScore.textContent = "High (Convective)";
+                instabilityScore.className = "font-mono font-bold text-red-400";
+                mlDownpourStatus.textContent = "Heavy Downpour Imminent within next 3 hours.";
+                mlDownpourStatus.className = "p-3 rounded-2xl bg-red-500/20 border border-red-500/40 text-xs text-red-200 text-center font-semibold mt-4";
+            } else if (mlProb > 40) {
+                instabilityScore.textContent = "Moderate Risk";
+                instabilityScore.className = "font-mono font-bold text-amber-300";
+                mlDownpourStatus.textContent = "Light drizzle or scattered showers probable.";
+                mlDownpourStatus.className = "p-3 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-xs text-amber-200 text-center font-semibold mt-4";
+            } else {
+                instabilityScore.textContent = "Stable Atmosphere";
+                instabilityScore.className = "font-mono font-bold text-emerald-400";
+                mlDownpourStatus.textContent = "Low rain probability. Clear or dry clouds.";
+                mlDownpourStatus.className = "p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-200 text-center font-semibold mt-4";
+            }
+
+            renderRainHourlyChart(hourly);
+
+            // 5. Flood Danger & River Level Tracker
+            renderRiverFloodTracker(data);
+
+            // 6. Agricultural Weather Advisory
+            renderAgriculturalAdvisory(current, hourly);
+        }
+
+        function renderDayNightChart(daily) {
+            const ctx = document.getElementById('dayNightChart').getContext('2d');
+            const dates = daily.time.map(t => {
+                const d = new Date(t);
+                return d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+            });
+
+            const maxTemps = daily.temperature_2m_max.map(t => state.unit === 'F' ? (t * 9/5) + 32 : t);
+            const minTemps = daily.temperature_2m_min.map(t => state.unit === 'F' ? (t * 9/5) + 32 : t);
+
+            if (state.dayNightChart) {
+                state.dayNightChart.destroy();
+            }
+
+            state.dayNightChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        {
+                            label: `Daytime Max (${state.unit === 'F' ? '°F' : '°C'})`,
+                            data: maxTemps,
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 5,
+                            pointBackgroundColor: '#f59e0b'
+                        },
+                        {
+                            label: `Nighttime Min (${state.unit === 'F' ? '°F' : '°C'})`,
+                            data: minTemps,
+                            borderColor: '#818cf8',
+                            backgroundColor: 'rgba(129, 140, 248, 0.15)',
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 5,
+                            pointBackgroundColor: '#818cf8'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#cbd5e1', font: { family: 'Plus Jakarta Sans', size: 12 } }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            titleColor: '#38bdf8',
+                            bodyColor: '#ffffff'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderRainHourlyChart(hourly) {
+            const ctx = document.getElementById('rainHourlyChart').getContext('2d');
+            const hours = hourly.time.slice(0, 24).map(t => t.split('T')[1]);
+            const probs = hourly.precipitation_probability ? hourly.precipitation_probability.slice(0, 24) : new Array(24).fill(0);
+            const precipAmounts = hourly.precipitation ? hourly.precipitation.slice(0, 24) : new Array(24).fill(0);
+
+            if (state.rainChart) {
+                state.rainChart.destroy();
+            }
+
+            state.rainChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: hours,
+                    datasets: [
+                        {
+                            type: 'bar',
+                            label: 'Rain Amount (mm)',
+                            data: precipAmounts,
+                            backgroundColor: 'rgba(56, 189, 248, 0.6)',
+                            borderColor: '#38bdf8',
+                            borderRadius: 6,
+                            yAxisID: 'y1'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Rain Probability (%)',
+                            data: probs,
+                            borderColor: '#a855f7',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 3,
+                            yAxisID: 'y'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#cbd5e1', font: { family: 'Plus Jakarta Sans', size: 11 } }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#94a3b8', maxRotation: 0 }
+                        },
+                        y: {
+                            type: 'linear',
+                            position: 'left',
+                            max: 100,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#a855f7', callback: v => v + '%' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#38bdf8', callback: v => v + ' mm' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initLeafletMap() {
+            state.map = L.map('weatherMap', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView([state.lat, state.lng], 9);
+
+            // Dark Mode CartoDB Map Tiles
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19
+            }).addTo(state.map);
+
+            // Custom Glowing Marker Icon
+            const customIcon = L.divIcon({
+                className: 'custom-map-pin',
+                html: `<div class="w-6 h-6 rounded-full bg-sky-500 border-2 border-white shadow-lg pulse-glow"></div>`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+
+            state.marker = L.marker([state.lat, state.lng], { icon: customIcon }).addTo(state.map);
+
+            // OpenWeatherMap / RainViewer Precipitation Overlay Simulation
+            state.radarLayer = L.tileLayer('https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=9de243494c0b295cca9337e1e96b00e2', {
+                opacity: 0.7
+            });
+        }
+
+        function updateLeafletMap(lat, lng, name) {
+            if (!state.map) {
+                initLeafletMap();
+            } else {
+                state.map.setView([lat, lng], 9);
+                state.marker.setLatLng([lat, lng]);
+            }
+        }
+
+        // 3D Perspective Map Tilt Button Toggle
+        document.getElementById('tiltMapBtn').addEventListener('click', () => {
+            const mapInner = document.getElementById('mapInner');
+            mapInner.classList.toggle('tilted');
+        });
+
+        // Layer Switchers
+        document.getElementById('layerRadar').addEventListener('click', function() {
+            this.className = "px-2.5 py-1 rounded-lg bg-sky-500 text-white font-semibold";
+            document.getElementById('layerClouds').className = "px-2.5 py-1 rounded-lg text-slate-400 hover:text-white";
+            document.getElementById('layerTemp').className = "px-2.5 py-1 rounded-lg text-slate-400 hover:text-white";
+            if (state.map && state.radarLayer) state.radarLayer.addTo(state.map);
+        });
+
+        document.getElementById('layerClouds').addEventListener('click', function() {
+            this.className = "px-2.5 py-1 rounded-lg bg-sky-500 text-white font-semibold";
+            document.getElementById('layerRadar').className = "px-2.5 py-1 rounded-lg text-slate-400 hover:text-white";
+            document.getElementById('layerTemp').className = "px-2.5 py-1 rounded-lg text-slate-400 hover:text-white";
+        });
+
+        document.getElementById('layerTemp').addEventListener('click', function() {
+            this.className = "px-2.5 py-1 rounded-lg bg-sky-500 text-white font-semibold";
+            document.getElementById('layerRadar').className = "px-2.5 py-1 rounded-lg text-slate-400 hover:text-white";
+            document.getElementById('layerClouds').className = "px-2.5 py-1 rounded-lg text-slate-400 hover:text-white";
+        });
+
+        function renderRiverFloodTracker(data) {
+            const container = document.getElementById('riverCardsContainer');
+            container.innerHTML = '';
+
+            const floodCities = [
+                { name: "Patna", river: "Ganges Basin", baseLevel: 48.2, dangerLevel: 50.0, lat: 25.5941, lng: 85.1376 },
+                { name: "Guwahati", river: "Brahmaputra", baseLevel: 49.1, dangerLevel: 49.68, lat: 26.1445, lng: 91.7362 },
+                { name: "Mumbai", river: "Mithi River", baseLevel: 3.1, dangerLevel: 4.2, lat: 19.0760, lng: 72.8777 },
+                { name: "Dibrugarh", river: "Brahmaputra East", baseLevel: 104.5, dangerLevel: 106.0, lat: 27.4728, lng: 94.9120 },
+                { name: "Shimla", river: "Sutlej Basin", baseLevel: 12.0, dangerLevel: 15.0, lat: 31.1048, lng: 77.1734 }
+            ];
+
+            let activeLocationSum = data.daily.precipitation_sum[0] + (data.daily.precipitation_sum[1] || 0);
+
+            floodCities.forEach((city, index) => {
+                // Simulate river gauge level based on location rain or mock variance
+                const rainFactor = (index === 0 && state.cityName.includes("Patna")) ? activeLocationSum * 0.1 : Math.random() * 0.8;
+                const currentGauge = (city.baseLevel + rainFactor).toFixed(2);
+                const isNearDanger = currentGauge >= (city.dangerLevel - 0.5);
+
+                const card = document.createElement('div');
+                card.className = `glass-card-sm p-4 rounded-2xl flex flex-col justify-between border-l-4 ${isNearDanger ? 'border-red-500' : 'border-blue-400'}`;
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-bold text-white">${city.name}</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded-md ${isNearDanger ? 'bg-red-500/20 text-red-300' : 'bg-blue-500/20 text-blue-300'} font-bold">
+                                ${isNearDanger ? 'WARNING' : 'NORMAL'}
+                            </span>
+                        </div>
+                        <span class="text-[11px] text-slate-400 block mt-0.5">${city.river}</span>
+                        <div class="mt-3">
+                            <span class="text-xs text-slate-400 block">Current River Gauge:</span>
+                            <span class="text-lg font-black text-white">${currentGauge} m</span>
+                            <span class="text-[10px] text-slate-500 block">Danger Level: ${city.dangerLevel} m</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+                        <div class="h-full ${isNearDanger ? 'bg-red-500' : 'bg-blue-400'}" style="width: ${Math.min(100, (currentGauge / city.dangerLevel) * 100)}%"></div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+
+            // Active Search Location Accumulation
+            document.getElementById('accRain48').textContent = `${activeLocationSum.toFixed(1)} mm`;
+            document.getElementById('soilSatVal').textContent = `${Math.min(98, Math.round(data.current.relative_humidity_2m * 0.95))}%`;
+
+            const drainageRisk = document.getElementById('drainageRiskVal');
+            const floodRiskBadge = document.getElementById('floodRiskIndexBadge');
+
+            if (activeLocationSum > 40) {
+                drainageRisk.textContent = "High Risk";
+                drainageRisk.className = "text-lg font-bold text-red-400";
+                floodRiskBadge.textContent = "FLOOD WATCH";
+                floodRiskBadge.className = "px-3 py-1 rounded-xl bg-red-500/20 text-red-300 font-bold text-xs border border-red-500/40";
+            } else {
+                drainageRisk.textContent = "Low";
+                drainageRisk.className = "text-lg font-bold text-emerald-400";
+                floodRiskBadge.textContent = "SAFE STATUS";
+                floodRiskBadge.className = "px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 font-bold text-xs border border-emerald-500/30";
+            }
+        }
+
+        function renderAgriculturalAdvisory(current, hourly) {
+            // 1. Sowing Suitability Index
+            const soilMoistureEstimate = current.relative_humidity_2m;
+            let sowingScore = 100;
+            if (current.precipitation > 15) sowingScore -= 40; // Too wet
+            if (current.temperature_2m > 40 || current.temperature_2m < 10) sowingScore -= 30;
+            sowingScore = Math.max(20, sowingScore);
+
+            document.getElementById('sowingScore').textContent = `${sowingScore}%`;
+            document.getElementById('sowingAdvice').textContent = sowingScore > 70 
+                ? "Excellent soil temperature and moisture conditions for seed germination."
+                : "Postpone sowing. Excessive rainfall or temperature extreme detected.";
+
+            // 2. Spray Window
+            const sprayStatus = document.getElementById('sprayStatus');
+            const sprayAdvice = document.getElementById('sprayAdvice');
+
+            if (current.wind_speed_10m < 15 && current.precipitation === 0) {
+                sprayStatus.textContent = "FAVORABLE";
+                sprayStatus.className = "text-xl font-black text-emerald-400";
+                sprayAdvice.textContent = `Wind speed is low (${current.wind_speed_10m} km/h). Safe for pesticide application.`;
+            } else {
+                sprayStatus.textContent = "UNFAVORABLE";
+                sprayStatus.className = "text-xl font-black text-red-400";
+                sprayAdvice.textContent = `High wind (${current.wind_speed_10m} km/h) or active rainfall causes chemical drift/washout.`;
+            }
+
+            // 3. Crop Heat/Frost Stress
+            const stressStatus = document.getElementById('cropStressStatus');
+            const stressAdvice = document.getElementById('cropStressAdvice');
+
+            if (current.temperature_2m > 36) {
+                stressStatus.textContent = "Heat Stress High";
+                stressStatus.className = "text-xl font-black text-amber-400";
+                stressAdvice.textContent = "Provide light shade or evening irrigation to prevent crop wilting.";
+            } else if (current.temperature_2m < 4) {
+                stressStatus.textContent = "Frost Risk High";
+                stressStatus.className = "text-xl font-black text-indigo-400";
+                stressAdvice.textContent = "Frost alert! Cover sensitive nursery crops or run micro-sprinklers.";
+            } else {
+                stressStatus.textContent = "Minimal Risk";
+                stressStatus.className = "text-xl font-black text-emerald-400";
+                stressAdvice.textContent = "Crop canopy is operating within optimal thermal limits.";
+            }
+
+            // 4. Reference Evapotranspiration ET0
+            let et0Val = 4.2;
+            if (hourly.et0_fao_evapotranspiration && hourly.et0_fao_evapotranspiration[0] !== undefined) {
+                et0Val = hourly.et0_fao_evapotranspiration[0];
+            }
+            document.getElementById('et0Val').textContent = `${et0Val.toFixed(1)} mm/day`;
+            document.getElementById('et0Advice').textContent = `Recommended daily crop water replenishment: approx ${ (et0Val * 10).toFixed(0) } m³/hectare.`;
+        }
+
+        function getWeatherDescription(code) {
+            const map = {
+                0: { text: "Clear Sky", icon: "fa-sun text-amber-400" },
+                1: { text: "Mainly Clear", icon: "fa-cloud-sun text-amber-300" },
+                2: { text: "Partly Cloudy", icon: "fa-cloud-sun text-sky-300" },
+                3: { text: "Overcast", icon: "fa-cloud text-slate-400" },
+                45: { text: "Foggy", icon: "fa-smog text-slate-400" },
+                48: { text: "Depositing Rime Fog", icon: "fa-smog text-slate-300" },
+                51: { text: "Light Drizzle", icon: "fa-cloud-rain text-sky-400" },
+                53: { text: "Moderate Drizzle", icon: "fa-cloud-rain text-sky-400" },
+                55: { text: "Dense Drizzle", icon: "fa-cloud-showers-heavy text-blue-400" },
+                61: { text: "Slight Rain", icon: "fa-cloud-rain text-sky-400" },
+                63: { text: "Moderate Rain", icon: "fa-cloud-showers-heavy text-blue-400" },
+                65: { text: "Heavy Rain", icon: "fa-cloud-showers-heavy text-indigo-400" },
+                80: { text: "Rain Showers", icon: "fa-cloud-showers-water text-sky-400" },
+                95: { text: "Thunderstorm", icon: "fa-bolt-lightning text-amber-400" }
+            };
+            return map[code] || { text: "Variable Sky", icon: "fa-cloud text-sky-400" };
+        }
+
+        document.getElementById('unitCel').addEventListener('click', () => {
+            state.unit = 'C';
+            document.getElementById('unitCel').className = "px-3 py-1.5 rounded-xl bg-sky-500 text-white transition-all shadow-md";
+            document.getElementById('unitFar').className = "px-3 py-1.5 rounded-xl text-slate-400 hover:text-white transition-all";
+            if (state.weatherData) renderAllDashboardComponents(state.weatherData);
+        });
+
+        document.getElementById('unitFar').addEventListener('click', () => {
+            state.unit = 'F';
+            document.getElementById('unitFar').className = "px-3 py-1.5 rounded-xl bg-sky-500 text-white transition-all shadow-md";
+            document.getElementById('unitCel').className = "px-3 py-1.5 rounded-xl text-slate-400 hover:text-white transition-all";
+            if (state.weatherData) renderAllDashboardComponents(state.weatherData);
+        });
+
+        // Modal Controls
+        const rainModal = document.getElementById('rainModal');
+        document.getElementById('rainSettingsBtn').addEventListener('click', () => rainModal.classList.remove('hidden'));
+        document.getElementById('closeRainModal').addEventListener('click', () => rainModal.classList.add('hidden'));
+
+        document.getElementById('rainCountSlider').addEventListener('input', (e) => {
+            rainConfig.count = parseInt(e.target.value);
+            document.getElementById('countValText').textContent = rainConfig.count;
+            initRain();
+        });
+
+        document.getElementById('rainSpeedSlider').addEventListener('input', (e) => {
+            rainConfig.speedMultiplier = parseFloat(e.target.value);
+            document.getElementById('speedValText').textContent = `${rainConfig.speedMultiplier}x`;
+            initRain();
+        });
+
+        document.getElementById('wipeGlassBtn').addEventListener('click', () => {
+            glassDroplets = [];
+            rainModal.classList.add('hidden');
+        });
+
+        window.addEventListener('load', () => {
+            fetchWeatherData();
+        });
+    </script>
+</body>
+</html>
